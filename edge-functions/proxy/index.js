@@ -1,14 +1,16 @@
 // لیسنر اصلی برای دریافت درخواست‌های ورودی به لبه (Edge)
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request));
-});
+// فرمت EdgeOne Pages Edge Function
+
+export async function onRequest(context) {
+  return handleRequest(context.request);
+}
 
 async function handleRequest(req) {
   // ۱. لیست هدرهایی که باید برای جلوگیری از تداخل و مسائل امنیتی حذف شوند
   const blockedKeys = [
-    "host", "connection", "keep-alive", "proxy-authenticate", 
-    "proxy-authorization", "te", "trailer", "transfer-encoding", 
-    "upgrade", "forwarded", "x-forwarded-host", "x-forwarded-proto", 
+    "host", "connection", "keep-alive", "proxy-authenticate",
+    "proxy-authorization", "te", "trailer", "transfer-encoding",
+    "upgrade", "forwarded", "x-forwarded-host", "x-forwarded-proto",
     "x-forwarded-port"
   ];
 
@@ -17,7 +19,7 @@ async function handleRequest(req) {
 
   // اگر هدر وجود نداشت، صرفاً یک پاسخ ساده برای تست سلامت (Health Check) برگردان
   if (!targetHost) {
-    return new Response("EdgeOne Proxy Status: Active", { 
+    return new Response("EdgeOne Proxy Status: Active", {
       status: 200,
       headers: { "content-type": "text/plain; charset=utf-8" }
     });
@@ -35,14 +37,14 @@ async function handleRequest(req) {
 
   req.headers.forEach((value, key) => {
     const lowerKey = key.toLowerCase();
-    
+
     // حذف هدرهای ممنوعه و خود x-host
     if (blockedKeys.includes(lowerKey) || lowerKey === "x-host") return;
-    
+
     // استخراج آی‌پ‌ی واقعی کاربر
     if (lowerKey === "x-real-ip") { clientIp = value; return; }
     if (lowerKey === "x-forwarded-for") { if (!clientIp) clientIp = value; return; }
-    
+
     cleanHeaders.set(lowerKey, value);
   });
 
@@ -77,7 +79,7 @@ async function handleRequest(req) {
 
   } catch (error) {
     // مدیریت خطاهای احتمالی در صورت عدم دسترسی به سرور مقصد
-    return new Response("Proxy Error (EdgeOne): " + error.message, { 
+    return new Response("Proxy Error (EdgeOne): " + error.message, {
       status: 502,
       headers: { "content-type": "text/plain; charset=utf-8" }
     });
