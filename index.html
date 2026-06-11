@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EdgeOne Proxy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      max-width: 640px;
+      width: 100%;
+      padding: 2.5rem;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #f8fafc;
+      margin-bottom: 0.25rem;
+    }
+    .badge {
+      display: inline-block;
+      background: #166534;
+      color: #bbf7d0;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      margin-bottom: 1.25rem;
+    }
+    p {
+      line-height: 1.7;
+      margin-bottom: 1rem;
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+    p strong { color: #e2e8f0; }
+    .section-title {
+      color: #cbd5e1;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+      border-top: 1px solid #334155;
+      padding-top: 1.25rem;
+    }
+    code {
+      background: #0f172a;
+      color: #38bdf8;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-family: "SF Mono", "Fira Code", monospace;
+    }
+    .en {
+      direction: ltr;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>پروکسی EdgeOne</h1>
+      <span class="badge">فعال — Active</span>
+
+      <p>
+        این سرویس یک پروکسی معکوس (Reverse Proxy) مبتنی بر EdgeOne Pages است
+        که درخواست‌ها را به سرور مقصد ارسال و پاسخ را به کاربر بازمی‌گرداند.
+      </p>
+
+      <p class="en">
+        A lightweight reverse proxy running on EdgeOne Pages Edge Functions.
+        It forwards requests to the target server and returns the response to the client.
+      </p>
+
+      <div class="section-title">نحوه استفاده — Usage</div>
+
+      <p>
+        آدرس مقصد را در هدر <code>x-host</code> ارسال کنید. پروکسی مسیر و کوئری را حفظ کرده و درخواست را به مقصد ارسال می‌کند.
+      </p>
+
+      <p class="en">
+        Send the target host in the <code>x-host</code> header. The proxy preserves the path and query string and forwards the request to the destination.
+      </p>
+
+      <p class="en">
+        <strong>Example:</strong><br>
+        <code>curl -H "x-host: example.com" https://your-domain/path</code>
+      </p>
+
+      <div class="section-title">بررسی سلامت — Health Check</div>
+
+      <p>
+        درخواست بدون هدر <code>x-host</code> یک پاسخ ساده برای بررسی سلامت سرویس برمی‌گرداند.
+      </p>
+
+      <p class="en">
+        A request without the <code>x-host</code> header returns a simple health check response indicating the proxy is active.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
