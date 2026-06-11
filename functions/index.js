@@ -1,76 +1,85 @@
-const uuid = "52a2859a-c704-4d35-aa6c-e44885e490c2";
+// لیسنر اصلی برای دریافت درخواست‌های ورودی به لبه (Edge)
+addEventListener('fetch', event => {
+  event.respondWith(handleRequest(event.request));
+});
 
-function parseUUID(id) {
-  const hex = id.replace(/-/g, "");
-  const arr = new Uint8Array(16);
-  for (let i = 0; i < 16; i++) arr[i] = parseInt(hex.slice(i*2, i*2+2), 16);
-  return arr;
-}
+async function handleRequest(req) {
+  // ۱. لیست هدرهایی که باید برای جلوگیری از تداخل و مسائل امنیتی حذف شوند
+  const blockedKeys = [
+    "host", "connection", "keep-alive", "proxy-authenticate", 
+    "proxy-authorization", "te", "trailer", "transfer-encoding", 
+    "upgrade", "forwarded", "x-forwarded-host", "x-forwarded-proto", 
+    "x-forwarded-port"
+  ];
 
-function matchUUID(a, b) {
-  for (let i = 0; i < 16; i++) if (a[i] !== b[i]) return false;
-  return true;
-}
+  // ۲. استخراج آدرس مقصد از هدر x-host
+  const targetHost = req.headers.get("x-host");
 
-export async function onRequest(context) {
-  const req = context.request;
-  const upgrade = req.headers.get("upgrade");
-
-  if (upgrade !== "websocket") {
-    return new Response("OK", { status: 200 });
+  // اگر هدر وجود نداشت، صرفاً یک پاسخ ساده برای تست سلامت (Health Check) برگردان
+  if (!targetHost) {
+    return new Response("EdgeOne Proxy Status: Active", { 
+      status: 200,
+      headers: { "content-type": "text/plain; charset=utf-8" }
+    });
   }
 
-  const [client, server] = Object.values(new WebSocketPair());
-  server.accept();
+  // ۳. بازسازی آدرس URL مقصد
+  const urlObj = new URL(req.url);
+  const isSecure = !targetHost.includes(":") || targetHost.includes(":443") || /^s\d+\./.test(targetHost);
+  const protocol = targetHost.startsWith("http") ? "" : (isSecure ? "https://" : "http://");
+  const destinationUrl = protocol + targetHost + urlObj.pathname + urlObj.search;
 
-  const expectedUUID = parseUUID(uuid);
-  let remote = null;
+  // ۴. کپی و فیلتر کردن هدرهای درخواست ورودی
+  const cleanHeaders = new Headers();
+  let clientIp = null;
 
-  server.addEventListener("message", async (e) => {
-    let data = e.data;
-    const buf = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(await data.arrayBuffer());
-
-    if (remote) {
-      const w = remote.writable.getWriter();
-      await w.write(buf);
-      w.releaseLock();
-      return;
-    }
-
-    let offset = 0;
-    offset += 1;
-    const clientUUID = buf.slice(offset, offset + 16); offset += 16;
-    if (!matchUUID(clientUUID, expectedUUID)) { server.close(1008, "bad uuid"); return; }
-    const addonsLen = buf[offset]; offset += 1 + addonsLen;
-    const cmd = buf[offset]; offset += 1;
-    if (cmd !== 1) { server.close(1008, "tcp only"); return; }
-    const port = (buf[offset] << 8) | buf[offset+1]; offset += 2;
-    const addrType = buf[offset]; offset += 1;
-
-    let host = "";
-    if (addrType === 1) { host = Array.from(buf.slice(offset, offset+4)).join("."); offset += 4; }
-    else if (addrType === 2) { const len = buf[offset]; offset += 1; host = new TextDecoder().decode(buf.slice(offset, offset+len)); offset += len; }
-    else if (addrType === 3) { host = buf.slice(offset, offset+16).join(":"); offset += 16; }
-
-    const remaining = buf.slice(offset);
-
-    try {
-      remote = connect({ hostname: host, port });
-      server.send(new Uint8Array([0, 0]));
-      if (remaining.length > 0) {
-        const w = remote.writable.getWriter();
-        await w.write(remaining);
-        w.releaseLock();
-      }
-      remote.readable.pipeTo(new WritableStream({
-        write(chunk) { server.send(chunk); }
-      })).catch(() => server.close());
-    } catch (err) {
-      server.close(1011, "connect failed: " + err.message);
-    }
+  req.headers.forEach((value, key) => {
+    const lowerKey = key.toLowerCase();
+    
+    // حذف هدرهای ممنوعه و خود x-host
+    if (blockedKeys.includes(lowerKey) || lowerKey === "x-host") return;
+    
+    // استخراج آی‌پ‌ی واقعی کاربر
+    if (lowerKey === "x-real-ip") { clientIp = value; return; }
+    if (lowerKey === "x-forwarded-for") { if (!clientIp) clientIp = value; return; }
+    
+    cleanHeaders.set(lowerKey, value);
   });
 
-  server.addEventListener("close", () => { try { remote?.writable.close(); } catch(_) {} });
+  // تنظیم هدر آی‌پی برای سرور مقصد
+  if (clientIp) {
+    cleanHeaders.set("x-forwarded-for", clientIp);
+  }
 
-  return new Response(null, { status: 101, webSocket: client });
+  try {
+    // ۵. ارسال درخواست به سرور مقصد (پروکسی کردن)
+    const response = await fetch(destinationUrl, {
+      method: req.method,
+      headers: cleanHeaders,
+      redirect: "manual",
+      // متدهای GET و HEAD نباید Body داشته باشند
+      body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body
+    });
+
+    // ۶. آماده‌سازی هدرهای پاسخ برای برگشت به کاربر
+    const responseHeaders = new Headers();
+    response.headers.forEach((value, key) => {
+      if (key.toLowerCase() !== "transfer-encoding") {
+        responseHeaders.set(key, value);
+      }
+    });
+
+    // ۷. تحویل پاسخ نهایی به مرورگر/کلاینت کاربر
+    return new Response(response.body, {
+      status: response.status,
+      headers: responseHeaders
+    });
+
+  } catch (error) {
+    // مدیریت خطاهای احتمالی در صورت عدم دسترسی به سرور مقصد
+    return new Response("Proxy Error (EdgeOne): " + error.message, { 
+      status: 502,
+      headers: { "content-type": "text/plain; charset=utf-8" }
+    });
+  }
 }
