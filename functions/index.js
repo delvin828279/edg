@@ -15,7 +15,7 @@ function matchUUID(a, b) {
 export async function onRequest(context) {
   const req = context.request;
   const upgrade = req.headers.get("upgrade");
-  
+
   if (upgrade !== "websocket") {
     return new Response("OK", { status: 200 });
   }
@@ -28,13 +28,12 @@ export async function onRequest(context) {
 
   server.addEventListener("message", async (e) => {
     let data = e.data;
-    if (typeof data === "string") data = new TextEncoder().encode(data);
-    const buf = new Uint8Array(data instanceof ArrayBuffer ? data : await data.arrayBuffer());
+    const buf = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(await data.arrayBuffer());
 
     if (remote) {
-      const writer = remote.writable.getWriter();
-      await writer.write(buf);
-      writer.releaseLock();
+      const w = remote.writable.getWriter();
+      await w.write(buf);
+      w.releaseLock();
       return;
     }
 
@@ -66,13 +65,12 @@ export async function onRequest(context) {
       remote.readable.pipeTo(new WritableStream({
         write(chunk) { server.send(chunk); }
       })).catch(() => server.close());
-    } catch (e) {
-      server.close(1011, "connect failed");
+    } catch (err) {
+      server.close(1011, "connect failed: " + err.message);
     }
   });
 
-  server.addEventListener("close", () => remote?.writable.close().catch(() => {}));
+  server.addEventListener("close", () => { try { remote?.writable.close(); } catch(_) {} });
 
   return new Response(null, { status: 101, webSocket: client });
 }
-
